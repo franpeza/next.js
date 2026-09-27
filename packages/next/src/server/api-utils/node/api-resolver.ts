@@ -40,6 +40,7 @@ type ApiContext = __ApiPreviewProps & {
   multiZoneDraftMode?: boolean
   dev: boolean
   internalRevalidate?: RevalidateFn
+  generateEtags?: boolean
 }
 
 function getMaxContentLength(responseLimit?: ResponseLimit) {
@@ -55,7 +56,12 @@ function getMaxContentLength(responseLimit?: ResponseLimit) {
  * @param res response object
  * @param body of response
  */
-function sendData(req: NextApiRequest, res: NextApiResponse, body: any): void {
+function sendData(
+  req: NextApiRequest,
+  res: NextApiResponse,
+  body: any,
+  generateEtags: boolean
+): void {
   if (body === null || body === undefined) {
     res.end()
     return
@@ -89,8 +95,10 @@ function sendData(req: NextApiRequest, res: NextApiResponse, body: any): void {
 
   const isJSONLike = ['object', 'number', 'boolean'].includes(typeof body)
   const stringifiedBody = isJSONLike ? JSON.stringify(body) : body
-  const etag = generateETag(stringifiedBody)
-  if (sendEtagResponse(req, res, etag)) {
+  if (
+    generateEtags &&
+    sendEtagResponse(req, res, generateETag(stringifiedBody))
+  ) {
     return
   }
 
@@ -408,7 +416,8 @@ export async function apiResolver(
       return endResponse.apply(apiRes, args)
     }
     apiRes.status = (statusCode) => sendStatusCode(apiRes, statusCode)
-    apiRes.send = (data) => sendData(apiReq, apiRes, data)
+    apiRes.send = (data) =>
+      sendData(apiReq, apiRes, data, apiContext.generateEtags !== false)
     apiRes.json = (data) => sendJson(apiRes, data)
     apiRes.redirect = (statusOrUrl: number | string, url?: string) =>
       redirect(apiRes, statusOrUrl, url)

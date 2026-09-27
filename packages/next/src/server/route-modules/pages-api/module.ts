@@ -99,6 +99,11 @@ type PagesAPIRouteHandlerContext = RouteModuleHandleContext & {
    * over the network
    */
   internalRevalidate?: RevalidateFn
+
+  /**
+   * Whether to generate etags for responses, from `generateEtags`
+   */
+  generateEtags?: boolean
 }
 
 export type PagesAPIRouteModuleOptions = RouteModuleOptions<
@@ -152,6 +157,7 @@ export class PagesAPIRouteModule extends RouteModule<
         multiZoneDraftMode: context.multiZoneDraftMode,
         dev: context.dev,
         internalRevalidate: context.internalRevalidate,
+        generateEtags: context.generateEtags,
       },
       context.propagateError,
       context.dev,

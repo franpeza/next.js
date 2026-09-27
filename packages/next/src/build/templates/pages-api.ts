@@ -76,7 +76,8 @@ export async function handler(
     return
   }
 
-  const { query, params, previewProps, routerServerContext } = prepareResult
+  const { query, params, previewProps, routerServerContext, nextConfig } =
+    prepareResult
 
   try {
     const method = req.method || 'GET'
@@ -111,6 +112,7 @@ export async function handler(
           page: 'VAR_DEFINITION_PAGE',
 
           internalRevalidate: routerServerContext?.revalidate,
+          generateEtags: nextConfig.generateEtags,
 
           onError: (...args: Parameters<InstrumentationOnRequestError>) =>
             onRequestError(req, ...args),
