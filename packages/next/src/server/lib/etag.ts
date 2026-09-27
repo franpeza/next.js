@@ -43,9 +43,21 @@ export const fnv1a52 = (str: string) => {
   )
 }
 
+let hashPayload: (payload: string) => string
+if (process.env.NEXT_RUNTIME === 'edge') {
+  hashPayload = (payload) =>
+    fnv1a52(payload).toString(36) + payload.length.toString(36)
+} else {
+  const crypto = require('crypto') as typeof import('crypto')
+  // `crypto.hash` is not available before Node.js 20.12
+  hashPayload =
+    typeof crypto.hash === 'function'
+      ? (payload) => crypto.hash('sha1', payload, 'base64url')
+      : (payload) =>
+          crypto.createHash('sha1').update(payload).digest('base64url')
+}
+
 export const generateETag = (payload: string, weak = false) => {
   const prefix = weak ? 'W/"' : '"'
-  return (
-    prefix + fnv1a52(payload).toString(36) + payload.length.toString(36) + '"'
-  )
+  return prefix + hashPayload(payload) + '"'
 }
