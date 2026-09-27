@@ -3,7 +3,21 @@ title: reactMaxHeadersLength
 description: The maximum length of the headers that are emitted by React and added to the response.
 ---
 
-During prerendering, React can emit headers that can be added to the response. These can be used to improve performance by allowing the browser to preload resources like fonts, scripts, and stylesheets. The default value is `6000`, but you can override this value by configuring the `reactMaxHeadersLength` option in `next.config.js`:
+{/* The content of this doc is shared between the app and pages router. You can use the `<PagesOnly>Content</PagesOnly>` component to add content that is specific to the Pages Router. Any shared content should not be wrapped in a component. */}
+
+<AppOnly>
+
+During prerendering, React can emit headers that can be added to the response. These can be used to improve performance by allowing the browser to preload resources like fonts, scripts, and stylesheets.
+
+</AppOnly>
+
+<PagesOnly>
+
+Next.js adds a `Link` header to the responses of pages rendered on each request, such as pages that use `getServerSideProps`. It preloads the scripts and stylesheets that `pages/_document` renders for the page. CDNs that support Early Hints can use it to let the browser start downloading these resources before the page has finished rendering.
+
+</PagesOnly>
+
+The default value is `6000`, but you can override this value by configuring the `reactMaxHeadersLength` option in `next.config.js`:
 
 ```js filename="next.config.js"
 module.exports = {
@@ -11,6 +25,6 @@ module.exports = {
 }
 ```
 
-> **Good to know**: This option is only available in App Router.
+Setting it to `0` disables these headers.
 
 Depending on the type of proxy between the browser and the server, the headers can be truncated. For example, if you are using a reverse proxy that doesn't support long headers, you should set a lower value to ensure that the headers are not truncated.
