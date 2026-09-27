@@ -106,6 +106,7 @@ import { getErrorSource } from '../shared/lib/error-source'
 import type { DeepReadonly } from '../shared/lib/deep-readonly'
 import type { PagesDevOverlayBridgeType } from '../next-devtools/userspace/pages/pages-dev-overlay-setup'
 import { getScriptNonceFromHeader } from './app-render/get-script-nonce-from-header'
+import { getPreloadLinkHeader, type PreloadResource } from './lib/preload-links'
 
 let tryGetPreviewData: typeof import('./api-utils/node/try-get-preview-data').tryGetPreviewData
 let warn: typeof import('../build/output/log').warn
@@ -275,6 +276,7 @@ export type RenderOptsPartial = {
     allowedOrigins?: string[]
   }
   crossOrigin?: 'anonymous' | 'use-credentials' | '' | undefined
+  reactMaxHeadersLength?: number
   images: ImageConfigComplete
   largePageDataBytes?: number
   isOnDemandRevalidate?: boolean
@@ -1477,6 +1479,7 @@ export async function renderToHTMLImpl(
   }
 
   const docComponentsRendered: DocumentProps['docComponentsRendered'] = {}
+  const preloadResources = new Map<string, PreloadResource>()
 
   const {
     assetPrefix,
@@ -1552,6 +1555,11 @@ export async function renderToHTMLImpl(
     nextFontManifest: renderOpts.nextFontManifest,
     experimentalClientTraceMetadata:
       renderOpts.experimental.clientTraceMetadata,
+    onPreloadResource: (href, as, crossOrigin) => {
+      if (!preloadResources.has(href)) {
+        preloadResources.set(href, { href, as, crossOrigin })
+      }
+    },
   }
 
   const document = (
@@ -1564,6 +1572,16 @@ export async function renderToHTMLImpl(
     RenderSpan.renderToString,
     async () => renderToString(document)
   )
+
+  const preloadLinkHeader = getPreloadLinkHeader(
+    preloadResources.values(),
+    renderOpts.reactMaxHeadersLength ?? 6000
+  )
+  // Prerendered pages are stored without their response headers, so only
+  // dynamically rendered pages get the header, to keep it consistent.
+  if (preloadLinkHeader && !isSSG) {
+    metadata.headers = { link: preloadLinkHeader }
+  }
 
   if (process.env.NODE_ENV !== 'production') {
     const nonRenderedComponents = []

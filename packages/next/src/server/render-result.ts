@@ -91,6 +91,7 @@ export type PrerenderResult =
   | PrerenderFailure
 
 export type PagesRenderResultMetadata = {
+  headers?: OutgoingHttpHeaders
   pageData?: any
   cacheControl?: CacheControl
   isNotFound?: boolean

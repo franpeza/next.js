@@ -118,14 +118,18 @@ function getDynamicChunks(
   return dynamicImports.map((file) => {
     if (!file.endsWith('.js') || files.allFiles.includes(file)) return null
 
+    const src = `${assetPrefix}/_next/${encodeURIPath(file)}${assetQueryString}`
+    const scriptCrossOrigin = props.crossOrigin || crossOrigin
+    context.onPreloadResource?.(src, 'script', scriptCrossOrigin)
+
     return (
       <script
         async={!isDevelopment && disableOptimizedLoading}
         defer={!disableOptimizedLoading}
         key={file}
-        src={`${assetPrefix}/_next/${encodeURIPath(file)}${assetQueryString}`}
+        src={src}
         nonce={props.nonce}
-        crossOrigin={props.crossOrigin || crossOrigin}
+        crossOrigin={scriptCrossOrigin}
       />
     )
   })
@@ -180,23 +184,30 @@ function getScripts(
     file.endsWith('.js')
   )
 
-  const scripts = [...normalScripts, ...lowPriorityScripts].map((file) => {
-    // static/immutable/chunks/51e975e7b637a580.js should use the immutable id, while
-    // static/Yj152X97rfGgF7NPcJEZs/_ssgManifest.js should use the deployment id
-    const query = file.startsWith('static/immutable/chunks')
-      ? assetQueryString
-      : mutableAssetQueryString
-    return (
-      <script
-        key={file}
-        src={`${assetPrefix}/_next/${encodeURIPath(file)}${query}`}
-        nonce={props.nonce}
-        async={!isDevelopment && disableOptimizedLoading}
-        defer={!disableOptimizedLoading}
-        crossOrigin={props.crossOrigin || crossOrigin}
-      />
-    )
-  })
+  const scripts = [...normalScripts, ...lowPriorityScripts].map(
+    (file, index) => {
+      // static/immutable/chunks/51e975e7b637a580.js should use the immutable id, while
+      // static/Yj152X97rfGgF7NPcJEZs/_ssgManifest.js should use the deployment id
+      const query = file.startsWith('static/immutable/chunks')
+        ? assetQueryString
+        : mutableAssetQueryString
+      const src = `${assetPrefix}/_next/${encodeURIPath(file)}${query}`
+      const scriptCrossOrigin = props.crossOrigin || crossOrigin
+      if (index < normalScripts.length) {
+        context.onPreloadResource?.(src, 'script', scriptCrossOrigin)
+      }
+      return (
+        <script
+          key={file}
+          src={src}
+          nonce={props.nonce}
+          async={!isDevelopment && disableOptimizedLoading}
+          defer={!disableOptimizedLoading}
+          crossOrigin={scriptCrossOrigin}
+        />
+      )
+    }
+  )
 
   // Emit the bootstrap before the chunk <script>s so the queue exists first.
   const bootstrapScript = getInlineBootstrapScript(context, props)
@@ -449,6 +460,11 @@ export class Head extends React.Component<HeadProps> {
       const isSharedFile = sharedFiles.has(file)
       const isUnmanagedFile = unmanagedFiles.has(file)
       const isFileInDynamicCssManifest = dynamicCssManifest.has(file)
+      const href = `${assetPrefix}/_next/${encodeURIPath(
+        file
+      )}${cssAssetQueryString}`
+      const linkCrossOrigin = this.props.crossOrigin || crossOrigin
+      this.context.onPreloadResource?.(href, 'style', linkCrossOrigin)
 
       if (!optimizeCss) {
         cssLinkElements.push(
@@ -456,11 +472,9 @@ export class Head extends React.Component<HeadProps> {
             key={`${file}-preload`}
             nonce={this.props.nonce}
             rel="preload"
-            href={`${assetPrefix}/_next/${encodeURIPath(
-              file
-            )}${cssAssetQueryString}`}
+            href={href}
             as="style"
-            crossOrigin={this.props.crossOrigin || crossOrigin}
+            crossOrigin={linkCrossOrigin}
           />
         )
       }
@@ -470,10 +484,8 @@ export class Head extends React.Component<HeadProps> {
           key={file}
           nonce={this.props.nonce}
           rel="stylesheet"
-          href={`${assetPrefix}/_next/${encodeURIPath(
-            file
-          )}${cssAssetQueryString}`}
-          crossOrigin={this.props.crossOrigin || crossOrigin}
+          href={href}
+          crossOrigin={linkCrossOrigin}
           data-n-g={isUnmanagedFile ? undefined : isSharedFile ? '' : undefined}
           data-n-p={
             isSharedFile || isUnmanagedFile || isFileInDynamicCssManifest
@@ -498,16 +510,20 @@ export class Head extends React.Component<HeadProps> {
             return null
           }
 
+          const href = `${assetPrefix}/_next/${encodeURIPath(
+            file
+          )}${assetQueryString}`
+          const linkCrossOrigin = this.props.crossOrigin || crossOrigin
+          this.context.onPreloadResource?.(href, 'script', linkCrossOrigin)
+
           return (
             <link
               rel="preload"
               key={file}
-              href={`${assetPrefix}/_next/${encodeURIPath(
-                file
-              )}${assetQueryString}`}
+              href={href}
               as="script"
               nonce={this.props.nonce}
-              crossOrigin={this.props.crossOrigin || crossOrigin}
+              crossOrigin={linkCrossOrigin}
             />
           )
         })
@@ -534,18 +550,23 @@ export class Head extends React.Component<HeadProps> {
           crossOrigin={this.props.crossOrigin || crossOrigin}
         />
       )),
-      ...preloadFiles.map((file: string) => (
-        <link
-          key={file}
-          nonce={this.props.nonce}
-          rel="preload"
-          href={`${assetPrefix}/_next/${encodeURIPath(
-            file
-          )}${assetQueryString}`}
-          as="script"
-          crossOrigin={this.props.crossOrigin || crossOrigin}
-        />
-      )),
+      ...preloadFiles.map((file: string) => {
+        const href = `${assetPrefix}/_next/${encodeURIPath(
+          file
+        )}${assetQueryString}`
+        const linkCrossOrigin = this.props.crossOrigin || crossOrigin
+        this.context.onPreloadResource?.(href, 'script', linkCrossOrigin)
+        return (
+          <link
+            key={file}
+            nonce={this.props.nonce}
+            rel="preload"
+            href={href}
+            as="script"
+            crossOrigin={linkCrossOrigin}
+          />
+        )
+      }),
     ]
   }
 

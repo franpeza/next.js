@@ -54,6 +54,11 @@ export type HtmlProps = {
   largePageDataBytes?: number
   nextFontManifest?: DeepReadonly<NextFontManifest>
   experimentalClientTraceMetadata?: string[]
+  onPreloadResource?: (
+    href: string,
+    as: 'script' | 'style',
+    crossOrigin: string | undefined
+  ) => void
 }
 
 export const HtmlContext = createContext<HtmlProps | undefined>(undefined)

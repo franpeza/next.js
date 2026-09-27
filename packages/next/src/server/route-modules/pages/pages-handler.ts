@@ -316,6 +316,7 @@ export const getHandler = ({
                   ),
                   domainLocales: nextConfig.i18n?.domains,
                   crossOrigin: nextConfig.crossOrigin,
+                  reactMaxHeadersLength: nextConfig.reactMaxHeadersLength,
 
                   multiZoneDraftMode,
                   basePath: nextConfig.basePath,
@@ -729,6 +730,17 @@ export const getHandler = ({
         if (isNextDataRequest && !isErrorPage && !is500Page) {
           if (deploymentId) {
             res.setHeader(NEXT_NAV_DEPLOYMENT_ID_HEADER, deploymentId)
+          }
+        } else {
+          const preloadLinkHeader = result.value.headers?.link
+          if (preloadLinkHeader) {
+            const existingLinkHeader = res.getHeader('link')
+            res.setHeader(
+              'link',
+              existingLinkHeader
+                ? `${existingLinkHeader}, ${preloadLinkHeader}`
+                : preloadLinkHeader
+            )
           }
         }
 
