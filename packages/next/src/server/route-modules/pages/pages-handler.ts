@@ -753,10 +753,12 @@ export const getHandler = ({
           // anymore
           result:
             isNextDataRequest && !isErrorPage && !is500Page
-              ? new RenderResult(JSON.stringify(result.value.pageData), {
-                  contentType: JSON_CONTENT_TYPE_HEADER,
-                  metadata: result.value.html.metadata,
-                })
+              ? result.value.html.contentType === JSON_CONTENT_TYPE_HEADER
+                ? result.value.html
+                : new RenderResult(JSON.stringify(result.value.pageData), {
+                    contentType: JSON_CONTENT_TYPE_HEADER,
+                    metadata: result.value.html.metadata,
+                  })
               : result.value.html,
           generateEtags: nextConfig.generateEtags,
           poweredByHeader: nextConfig.poweredByHeader,
