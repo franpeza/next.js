@@ -2274,6 +2274,38 @@ export default class Router implements BaseRouter {
         return new Promise<never>(() => {})
       }
 
+      // Whether the route needs data is only known once its component has
+      // loaded, so start the data request in parallel when the build says it
+      // will be needed. The request below reuses it from the inflight cache.
+      if (
+        process.env.NODE_ENV === 'production' &&
+        !cachedRouteInfo &&
+        !data &&
+        !isQueryUpdating &&
+        !unstable_skipClientCache
+      ) {
+        const dataHref = this.pageLoader.getDataHref({
+          href: formatWithValidation({ pathname, query }),
+          asPath: resolvedAs,
+          locale,
+        })
+        this.pageLoader
+          ._hasServerData(route)
+          .then((hasServerData) => {
+            if (hasServerData) {
+              return fetchNextData({
+                dataHref,
+                isServerRender: this.isSsr,
+                parseJSON: true,
+                inflightCache: this.sdc,
+                persistCache: !isPreview,
+                isPrefetch: false,
+              })
+            }
+          })
+          .catch(() => {})
+      }
+
       const routeInfo =
         cachedRouteInfo ||
         (await this.fetchComponent(route).then<CompletePrivateRouteInfo>(
