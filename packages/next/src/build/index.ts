@@ -688,10 +688,12 @@ async function writeClientSsgManifest(
     buildId,
     distDir,
     locales,
+    serverPropsPages,
   }: {
     buildId: string
     distDir: string
     locales: readonly string[] | undefined
+    serverPropsPages: ReadonlySet<string>
   }
 ) {
   const ssgPages = new Set<string>(
@@ -706,6 +708,8 @@ async function writeClientSsgManifest(
 
   const clientSsgManifestContent = `self.__SSG_MANIFEST=${devalue(
     ssgPages
+  )};self.__SSP_MANIFEST=${devalue(
+    new Set([...serverPropsPages].sort())
   )};self.__SSG_MANIFEST_CB&&self.__SSG_MANIFEST_CB()`
 
   let ssgManifestPath = path.join(
@@ -4487,15 +4491,25 @@ export default async function build(
           distDir,
           buildId,
           locales: config.i18n?.locales,
+          serverPropsPages,
         })
       } else {
-        await writePrerenderManifest(distDir, {
+        const emptyPrerenderManifest: PrerenderManifest = {
           version: 4,
           routes: {},
           dynamicRoutes: {},
           notFoundRoutes: [],
           preview: previewProps,
-        })
+        }
+        await writePrerenderManifest(distDir, emptyPrerenderManifest)
+        if (serverPropsPages.size > 0) {
+          await writeClientSsgManifest(emptyPrerenderManifest, {
+            distDir,
+            buildId,
+            locales: config.i18n?.locales,
+            serverPropsPages,
+          })
+        }
       }
 
       await writeManifest(

@@ -25,6 +25,7 @@ declare global {
     __DEV_PAGES_MANIFEST?: { pages: string[] }
     __SSG_MANIFEST_CB?: () => void
     __SSG_MANIFEST?: Set<string>
+    __SSP_MANIFEST?: Set<string>
   }
 }
 
@@ -190,6 +191,16 @@ export default class PageLoader {
     route: string
   ): Promise<boolean> {
     return this.promisedSsgManifest.then((manifest) => manifest.has(route))
+  }
+
+  _hasServerData(
+    /** the route (file-system path) */
+    route: string
+  ): Promise<boolean> {
+    return this.promisedSsgManifest.then(
+      (manifest) =>
+        manifest.has(route) || Boolean(window.__SSP_MANIFEST?.has(route))
+    )
   }
 
   loadPage(route: string): Promise<GoodPageCache> {
