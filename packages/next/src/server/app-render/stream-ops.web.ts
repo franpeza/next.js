@@ -39,7 +39,7 @@ export type AnyStream = AnyStreamType
 
 export type ContinueStreamSharedOptions = {
   deploymentId: string | undefined
-  getServerInsertedHTML: () => Promise<string>
+  getServerInsertedHTML: () => Promise<string> | string
   getServerInsertedMetadata: () => Promise<string>
 }
 
@@ -125,7 +125,7 @@ export async function continueStaticPrerender(
 export async function continueDynamicPrerender(
   prerenderStream: AnyStream,
   opts: {
-    getServerInsertedHTML: () => Promise<string>
+    getServerInsertedHTML: () => Promise<string> | string
     getServerInsertedMetadata: () => Promise<string>
     deploymentId: string | undefined
   }

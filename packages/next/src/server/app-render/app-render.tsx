@@ -8861,7 +8861,7 @@ async function continueStaticPrerenderWithInlinedData(
   createInlinedDataStream: typeof createWebInlinedDataStream,
   formState: unknown | null,
   nonce: string | undefined,
-  getServerInsertedHTML: () => Promise<string>,
+  getServerInsertedHTML: () => Promise<string> | string,
   getServerInsertedMetadata: () => Promise<string>,
   deploymentId: string | undefined,
   ComponentMod: AppPageModule,

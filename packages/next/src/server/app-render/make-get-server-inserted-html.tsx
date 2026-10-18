@@ -38,7 +38,9 @@ export function makeGetServerInsertedHTML({
     <meta key={`next-trace-data-${index}`} name={key} content={value} />
   ))
 
-  return async function getServerInsertedHTML() {
+  // Returns synchronously when there is nothing to insert, which is the case
+  // for most chunks, so callers can skip a microtask per chunk.
+  return function getServerInsertedHTML(): string | Promise<string> {
     // Loop through all the errors that have been captured but not yet
     // flushed.
     const errorMetaTags = []
@@ -87,23 +89,26 @@ export function makeGetServerInsertedHTML({
       return ''
     }
 
-    const { stream } = await (
-      process.env.__NEXT_USE_NODE_STREAMS
-        ? renderToNodeFizzStream
-        : renderToWebFizzStream
-    )(
+    return renderInsertedHTML(
       <>
         {polyfillTags}
         {serverInsertedHTML}
         {traceMetaTags}
         {errorMetaTags}
-      </>,
-      {
-        // Larger chunk because this isn't sent over the network.
-        // Let's set it to 1MB.
-        progressiveChunkSize: 1024 * 1024,
-      }
+      </>
     )
+  }
+
+  async function renderInsertedHTML(content: React.ReactElement) {
+    const { stream } = await (
+      process.env.__NEXT_USE_NODE_STREAMS
+        ? renderToNodeFizzStream
+        : renderToWebFizzStream
+    )(content, {
+      // Larger chunk because this isn't sent over the network.
+      // Let's set it to 1MB.
+      progressiveChunkSize: 1024 * 1024,
+    })
 
     // The polyfills and trace metadata have been flushed, so they don't need to be rendered again
     polyfillTags = []

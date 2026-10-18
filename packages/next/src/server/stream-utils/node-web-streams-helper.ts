@@ -461,7 +461,7 @@ export function createMetadataTransformStream(
 }
 
 export function createHeadInsertionTransformStream(
-  insert: () => Promise<string>
+  insert: () => Promise<string> | string
 ): TransformStream<Uint8Array, Uint8Array> {
   let inserted = false
 
@@ -923,7 +923,7 @@ export type ContinueStreamOptions = {
   inlinedDataStream: ReadableStream<Uint8Array> | undefined
   waitForAllReady: boolean
   deploymentId: string | undefined
-  getServerInsertedHTML: () => Promise<string>
+  getServerInsertedHTML: () => Promise<string> | string
   getServerInsertedMetadata: () => Promise<string>
   validateRootLayout?: boolean
   /**
@@ -990,7 +990,7 @@ export async function continueFizzStream(
 }
 
 type ContinueDynamicPrerenderOptions = {
-  getServerInsertedHTML: () => Promise<string>
+  getServerInsertedHTML: () => Promise<string> | string
   getServerInsertedMetadata: () => Promise<string>
   deploymentId: string | undefined
 }
@@ -1018,7 +1018,7 @@ export async function continueDynamicPrerender(
 
 type ContinueStaticPrerenderOptions = {
   inlinedDataStream: ReadableStream<Uint8Array>
-  getServerInsertedHTML: () => Promise<string>
+  getServerInsertedHTML: () => Promise<string> | string
   getServerInsertedMetadata: () => Promise<string>
   deploymentId: string | undefined
 }
@@ -1081,7 +1081,7 @@ export async function continueStaticFallbackPrerender(
 
 type ContinueResumeOptions = {
   inlinedDataStream: ReadableStream<Uint8Array>
-  getServerInsertedHTML: () => Promise<string>
+  getServerInsertedHTML: () => Promise<string> | string
   getServerInsertedMetadata: () => Promise<string>
   delayDataUntilFirstHtmlChunk: boolean
   deploymentId: string | undefined

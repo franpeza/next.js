@@ -209,50 +209,76 @@ function createFlightDataInjectionTransform(
 // ---------------------------------------------------------------------------
 
 function createHeadInsertionTransform(
-  insert: () => Promise<string>
+  insert: () => Promise<string> | string
 ): Transform {
   let inserted = false
   let hasBytes = false
 
+  function pushWithInsertion(
+    target: Transform,
+    chunk: Buffer,
+    insertion: string
+  ) {
+    if (inserted) {
+      if (insertion) {
+        target.push(Buffer.from(insertion))
+      }
+      target.push(chunk)
+    } else {
+      const index = indexOfUint8Array(chunk, ENCODED_TAGS.CLOSED.HEAD)
+      if (index !== -1) {
+        if (insertion) {
+          const encodedInsertion = Buffer.from(insertion)
+          const merged = Buffer.allocUnsafe(
+            chunk.length + encodedInsertion.length
+          )
+          merged.set(chunk.slice(0, index))
+          merged.set(encodedInsertion, index)
+          merged.set(chunk.slice(index), index + encodedInsertion.length)
+          target.push(merged)
+        } else {
+          target.push(chunk)
+        }
+        inserted = true
+      } else {
+        if (insertion) {
+          target.push(Buffer.from(insertion))
+        }
+        target.push(chunk)
+        inserted = true
+      }
+    }
+  }
+
   return new Transform({
-    async transform(chunk, _encoding, callback) {
+    transform(chunk, _encoding, callback) {
       hasBytes = true
 
+      let insertion: Promise<string> | string
       try {
-        const insertion = await insert()
-        if (inserted) {
-          if (insertion) {
-            this.push(Buffer.from(insertion))
-          }
-          this.push(chunk)
-        } else {
-          const index = indexOfUint8Array(chunk, ENCODED_TAGS.CLOSED.HEAD)
-          if (index !== -1) {
-            if (insertion) {
-              const encodedInsertion = Buffer.from(insertion)
-              const merged = Buffer.allocUnsafe(
-                chunk.length + encodedInsertion.length
-              )
-              merged.set(chunk.slice(0, index))
-              merged.set(encodedInsertion, index)
-              merged.set(chunk.slice(index), index + encodedInsertion.length)
-              this.push(merged)
-            } else {
-              this.push(chunk)
-            }
-            inserted = true
-          } else {
-            if (insertion) {
-              this.push(Buffer.from(insertion))
-            }
-            this.push(chunk)
-            inserted = true
-          }
-        }
-        callback()
+        insertion = insert()
       } catch (err) {
         callback(err as Error)
+        return
       }
+
+      // PROBE (not for commit): env-gated so both variants share one build.
+      if (
+        typeof insertion === 'string' &&
+        process.env.__NEXT_PROBE_SYNC_HEAD === '1'
+      ) {
+        pushWithInsertion(this, chunk, insertion)
+        callback()
+        return
+      }
+
+      Promise.resolve(insertion).then(
+        (html) => {
+          pushWithInsertion(this, chunk, html)
+          callback()
+        },
+        (err) => callback(err as Error)
+      )
     },
     async flush(callback) {
       try {
@@ -737,6 +763,17 @@ export async function continueFizzStream(
 
   let source: Readable = buffered
 
+  // PROBE (not for commit): upper bound of the transform chain's cost.
+  const probe = process.env.__NEXT_PROBE_TRANSFORMS
+  if (probe === '1' && inlinedDataStream) {
+    const flightInjection = createFlightDataInjectionTransform(
+      webToReadable(inlinedDataStream),
+      true
+    )
+    source.pipe(flightInjection)
+    return flightInjection
+  }
+
   if (deploymentId) {
     const dplId = createHtmlDataDplIdTransform(deploymentId)
     source.pipe(dplId)
@@ -744,12 +781,14 @@ export async function continueFizzStream(
   }
 
   // Metadata (icon mark replacement)
-  const metadata = createMetadataTransform(getServerInsertedMetadata)
-  source.pipe(metadata)
-  source = metadata
+  if (probe !== 'rest') {
+    const metadata = createMetadataTransform(getServerInsertedMetadata)
+    source.pipe(metadata)
+    source = metadata
+  }
 
   // Insert suffix content
-  if (suffixUnclosed != null && suffixUnclosed.length > 0) {
+  if (probe !== 'rest' && suffixUnclosed != null && suffixUnclosed.length > 0) {
     const deferredSuffix = createDeferredSuffixTransform(suffixUnclosed)
     source.pipe(deferredSuffix)
     source = deferredSuffix
@@ -772,14 +811,18 @@ export async function continueFizzStream(
   }
 
   // Close tags should always be deferred to the end
-  const moveSuffix = createMoveSuffixTransform()
-  source.pipe(moveSuffix)
-  source = moveSuffix
+  if (probe !== 'rest') {
+    const moveSuffix = createMoveSuffixTransform()
+    source.pipe(moveSuffix)
+    source = moveSuffix
+  }
 
   // Head insertion – inserts server-generated HTML before </head>
-  const headInsertion = createHeadInsertionTransform(getServerInsertedHTML)
-  source.pipe(headInsertion)
-  source = headInsertion
+  if (probe !== 'head') {
+    const headInsertion = createHeadInsertionTransform(getServerInsertedHTML)
+    source.pipe(headInsertion)
+    source = headInsertion
+  }
 
   return source
 }
@@ -803,7 +846,7 @@ export async function continueStaticPrerender(
 export async function continueDynamicPrerender(
   prerenderStream: AnyStream,
   opts: {
-    getServerInsertedHTML: () => Promise<string>
+    getServerInsertedHTML: () => Promise<string> | string
     getServerInsertedMetadata: () => Promise<string>
     deploymentId: string | undefined
   }
