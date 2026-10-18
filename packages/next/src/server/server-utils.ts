@@ -214,6 +214,24 @@ export function normalizeDynamicRouteParams(
   }
 }
 
+// Compiling a rewrite source into a matcher costs far more than running it,
+// and the rewrites are fixed for the lifetime of the server.
+const rewriteMatchers = new Map<string, ReturnType<typeof getPathMatch>>()
+
+function getRewriteMatcher(source: string, caseSensitive: boolean) {
+  const key = `${caseSensitive ? 's' : 'i'}:${source}`
+  let matcher = rewriteMatchers.get(key)
+  if (!matcher) {
+    matcher = getPathMatch(source, {
+      removeUnnamedParams: true,
+      strict: true,
+      sensitive: caseSensitive,
+    })
+    rewriteMatchers.set(key, matcher)
+  }
+  return matcher
+}
+
 export function getServerUtils({
   page,
   i18n,
@@ -251,6 +269,11 @@ export function getServerUtils({
     req: BaseNextRequest | IncomingMessage,
     parsedUrl: DeepReadonly<NextUrlWithParsedQuery>
   ) {
+    // PROBE (not for commit): env-gated so both variants share one build.
+    if (process.env.__NEXT_PROBE_REWRITES === '1') {
+      return handleRewritesLazily(req, parsedUrl)
+    }
+
     // Here we deep clone the parsedUrl to avoid mutating the original. We also
     // cast this to a mutable type so we can mutate it within this scope.
     const rewrittenParsedUrl = structuredClone(
@@ -366,6 +389,137 @@ export function getServerUtils({
           if (finished) break
         }
       }
+    }
+
+    return { rewriteParams, rewrittenParsedUrl }
+  }
+
+  function handleRewritesLazily(
+    req: BaseNextRequest | IncomingMessage,
+    parsedUrl: DeepReadonly<NextUrlWithParsedQuery>
+  ) {
+    // Matching only reads the URL, so the deep clone that protects the
+    // original is deferred until a rewrite applies.
+    let rewrittenParsedUrl: NextUrlWithParsedQuery | undefined
+    const current = () =>
+      rewrittenParsedUrl ?? (parsedUrl as NextUrlWithParsedQuery)
+    const rewriteParams: Record<string, string> = {}
+    let fsPathname = parsedUrl.pathname
+
+    const matchesPage = () => {
+      const fsPathnameNoSlash = removeTrailingSlash(fsPathname || '')
+      return (
+        fsPathnameNoSlash === removeTrailingSlash(page) ||
+        dynamicRouteMatcher?.(fsPathnameNoSlash)
+      )
+    }
+
+    const checkRewrite = (rewrite: DeepReadonly<Rewrite>): boolean => {
+      const matcher = getRewriteMatcher(
+        rewrite.source + (trailingSlash ? '(/)?' : ''),
+        !!caseSensitive
+      )
+
+      const { pathname, query } = current()
+      if (!pathname) return false
+
+      let params = matcher(pathname)
+
+      if ((rewrite.has || rewrite.missing) && params) {
+        const hasParams = matchHas(
+          req,
+          query,
+          rewrite.has as Rewrite['has'],
+          rewrite.missing as Rewrite['missing']
+        )
+
+        if (hasParams) {
+          Object.assign(params, hasParams)
+        } else {
+          params = false
+        }
+      }
+
+      if (params) {
+        const { parsedDestination, destQuery } = prepareDestination({
+          appendParamsToQuery: true,
+          destination: rewrite.destination,
+          params: params,
+          query,
+        })
+
+        // if the rewrite destination is external break rewrite chain
+        if (parsedDestination.protocol) {
+          return true
+        }
+
+        rewrittenParsedUrl ??= structuredClone(
+          parsedUrl
+        ) as NextUrlWithParsedQuery
+
+        Object.assign(rewriteParams, destQuery, params)
+        Object.assign(rewrittenParsedUrl.query, parsedDestination.query)
+        delete (parsedDestination as any).query
+
+        Object.assign(rewrittenParsedUrl, parsedDestination)
+
+        fsPathname = rewrittenParsedUrl.pathname
+        if (!fsPathname) return false
+
+        if (basePath) {
+          fsPathname = removePathPrefix(fsPathname, basePath)
+        }
+
+        if (i18n) {
+          const result = normalizeLocalePath(fsPathname, i18n.locales)
+          fsPathname = result.pathname
+          rewrittenParsedUrl.query.nextInternalLocale =
+            result.detectedLocale || params.nextInternalLocale
+        }
+
+        if (fsPathname === page) {
+          return true
+        }
+
+        if (pageIsDynamic && dynamicRouteMatcher) {
+          const dynamicParams = dynamicRouteMatcher(fsPathname)
+          if (dynamicParams) {
+            rewrittenParsedUrl.query = {
+              ...rewrittenParsedUrl.query,
+              ...dynamicParams,
+            }
+            return true
+          }
+        }
+      }
+
+      return false
+    }
+
+    for (const rewrite of rewrites.beforeFiles || []) {
+      checkRewrite(rewrite)
+    }
+
+    if (fsPathname !== page) {
+      let finished = false
+
+      for (const rewrite of rewrites.afterFiles || []) {
+        finished = checkRewrite(rewrite)
+        if (finished) break
+      }
+
+      if (!finished && !matchesPage()) {
+        for (const rewrite of rewrites.fallback || []) {
+          finished = checkRewrite(rewrite)
+          if (finished) break
+        }
+      }
+    }
+
+    // Callers mutate the result, so it must not be the original object.
+    rewrittenParsedUrl ??= {
+      ...(parsedUrl as NextUrlWithParsedQuery),
+      query: { ...parsedUrl.query } as NextUrlWithParsedQuery['query'],
     }
 
     return { rewriteParams, rewrittenParsedUrl }
